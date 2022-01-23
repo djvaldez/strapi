@@ -4,6 +4,7 @@ const _ = require('lodash');
 const pathToRegexp = require('path-to-regexp');
 
 const queryParams = require('../query-params');
+const cleanSchemaAttributes = require('../clean-schema-attributes');
 const buildApiRequests = require('./build-api-requests');
 const buildApiResponses = require('./build-api-responses');
 
@@ -102,6 +103,19 @@ const getPaths = ({ routeInfo, attributes, tag }) => {
 
     if (isListOfEntities) {
       swaggerConfig.parameters.push(...queryParams);
+      const cleanAttributes = cleanSchemaAttributes(attributes);
+      for (const name in cleanAttributes) {
+        const attribute = cleanAttributes[name];
+        swaggerConfig.parameters.push({
+          name: `filters[${name}]`,
+          in: 'query',
+          deprecated: false,
+          required: false,
+          schema: {
+            type: attribute.type,
+          },
+        });
+      }
     }
 
     if (hasPathParams) {
