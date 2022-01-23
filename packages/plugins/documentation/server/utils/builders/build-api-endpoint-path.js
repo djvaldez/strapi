@@ -4,8 +4,35 @@ const _ = require('lodash');
 const pathToRegexp = require('path-to-regexp');
 
 const queryParams = require('../query-params');
+const cleanSchemaAttributes = require('../clean-schema-attributes');
+const getSchemaData = require('../get-schema-data');
 const buildApiRequests = require('./build-api-requests');
 const buildApiResponses = require('./build-api-responses');
+
+/**
+ *
+ * @param {boolean} isSingleEntity - Checks for a single entity
+ * @returns {object} The correctly formatted meta object
+ */
+const getMeta = isListOfEntities => {
+  if (isListOfEntities) {
+    return {
+      type: 'object',
+      properties: {
+        pagination: {
+          properties: {
+            page: { type: 'integer' },
+            pageSize: { type: 'integer', minimum: 25 },
+            pageCount: { type: 'integer', maximum: 1 },
+            total: { type: 'integer' },
+          },
+        },
+      },
+    };
+  }
+
+  return { type: 'object' };
+};
 
 /**
  * @description Parses a route with ':variable'
@@ -69,6 +96,7 @@ const getPathWithPrefix = (prefix, path) => {
 };
 
 /**
+ * @description Builds the paths and schemas for an APi route
  *
  * @param {object} api - Information about the api
  * @param {object} api.routeInfo - The routes for a given api or plugin
@@ -79,7 +107,8 @@ const getPathWithPrefix = (prefix, path) => {
  *
  * @returns {object}
  */
-const getPaths = ({ routeInfo, attributes, tag }) => {
+const getRoutePathsAndSchemas = ({ routeInfo, attributes, tag }) => {
+  const schemas = {};
   const paths = routeInfo.routes.reduce((acc, route) => {
     // TODO: Find a more reliable way to determine list of entities vs a single entity
     const isListOfEntities = route.handler.split('.').pop() === 'find';
@@ -91,7 +120,21 @@ const getPaths = ({ routeInfo, attributes, tag }) => {
       : route.path;
     const routePath = hasPathParams ? parsePathWithVariables(pathWithPrefix) : pathWithPrefix;
 
-    const { responses } = buildApiResponses(attributes, route, isListOfEntities);
+    const { responses } = buildApiResponses(tag, route, isListOfEntities);
+    for (const response of _.values(responses)) {
+      for (const contentTypeResponse of _.values(response.content)) {
+        if (_.has(contentTypeResponse.schema, '$ref')) {
+          const schemaName = _.last(_.split(contentTypeResponse.schema['$ref'], '/'));
+          schemas[schemaName] = {
+            type: 'object',
+            properties: {
+              data: getSchemaData(isListOfEntities, cleanSchemaAttributes(attributes)),
+              meta: getMeta(isListOfEntities),
+            },
+          };
+        }
+      }
+    }
 
     const swaggerConfig = {
       responses,
@@ -120,7 +163,7 @@ const getPaths = ({ routeInfo, attributes, tag }) => {
     return acc;
   }, {});
 
-  return { paths };
+  return { paths, schemas };
 };
 
 /**
@@ -145,8 +188,15 @@ module.exports = api => {
       tag: api.name,
     };
 
-    return getPaths(apiInfo);
+    return getRoutePathsAndSchemas(apiInfo);
   }
+
+  let pathAndSchemaObject = {
+    paths: {},
+    components: {
+      schemas: {},
+    },
+  };
 
   // An api could have multiple contentTypes
   for (const contentTypeName of api.ctNames) {
@@ -169,6 +219,17 @@ module.exports = api => {
       tag,
     };
 
-    return getPaths(apiInfo);
+    const { paths, schemas } = getRoutePathsAndSchemas(apiInfo);
+    pathAndSchemaObject = {
+      paths: {
+        ...pathAndSchemaObject.paths,
+        ...paths,
+      },
+      schemas: {
+        ...pathAndSchemaObject.schemas,
+        ...schemas,
+      },
+    };
   }
+  return pathAndSchemaObject;
 };

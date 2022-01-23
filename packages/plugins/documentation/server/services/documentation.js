@@ -108,6 +108,7 @@ module.exports = ({ strapi }) => {
      */
     async generateFullDoc(version = this.getDocumentationVersion()) {
       let paths = {};
+      let schemas = {};
 
       const apis = this.getPluginAndApiInfo();
       for (const api of apis) {
@@ -122,9 +123,19 @@ module.exports = ({ strapi }) => {
         }
 
         await fs.ensureFile(apiDocPath);
-        await fs.writeJson(apiDocPath, apiPathsObject, { spaces: 2 });
+        await fs.writeJson(
+          apiDocPath,
+          {
+            paths: apiPathsObject.paths,
+            components: {
+              schemas: apiPathsObject.schemas,
+            },
+          },
+          { spaces: 2 }
+        );
 
         paths = { ...paths, ...apiPathsObject.paths };
+        schemas = { ...schemas, ...apiPathsObject.schemas };
       }
 
       const fullDocJsonPath = path.join(
@@ -149,7 +160,11 @@ module.exports = ({ strapi }) => {
       _.set(settings, ['info', 'version'], version);
 
       await fs.ensureFile(fullDocJsonPath);
-      await fs.writeJson(fullDocJsonPath, { ...settings, paths }, { spaces: 2 });
+      await fs.writeJson(
+        fullDocJsonPath,
+        { ...settings, paths, components: { schemas } },
+        { spaces: 2 }
+      );
     },
   };
 };

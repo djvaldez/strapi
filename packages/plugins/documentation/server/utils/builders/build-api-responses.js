@@ -1,44 +1,17 @@
 'use strict';
 
-const getSchemaData = require('../get-schema-data');
-const cleanSchemaAttributes = require('../clean-schema-attributes');
+const _ = require('lodash');
 const errorResponse = require('../error-response');
-
-/**
- *
- * @param {boolean} isSingleEntity - Checks for a single entity
- * @returns {object} The correctly formatted meta object
- */
-const getMeta = isListOfEntities => {
-  if (isListOfEntities) {
-    return {
-      type: 'object',
-      properties: {
-        pagination: {
-          properties: {
-            page: { type: 'integer' },
-            pageSize: { type: 'integer', minimum: 25 },
-            pageCount: { type: 'integer', maximum: 1 },
-            total: { type: 'integer' },
-          },
-        },
-      },
-    };
-  }
-
-  return { type: 'object' };
-};
 
 /**
  * @description - Builds the Swagger response object for a given api
  *
- * @param {object} attributes - The attributes found on a contentType
+ * @param {string} tag - The path tag
  * @param {object} route - The current route
- * @param {boolean} isListOfEntities - Checks for a list of entitities
  *
  * @returns The Swagger responses
  */
-module.exports = (attributes, route, isListOfEntities = false) => {
+module.exports = (tag, route, isListOfEntities = false) => {
   let schema;
   if (route.method === 'DELETE') {
     schema = {
@@ -46,11 +19,11 @@ module.exports = (attributes, route, isListOfEntities = false) => {
       format: 'int64',
     };
   } else {
+    const responseName = `${_.words(_.startCase(tag)).join('')}${
+      isListOfEntities ? 'List' : ''
+    }Response`;
     schema = {
-      properties: {
-        data: getSchemaData(isListOfEntities, cleanSchemaAttributes(attributes)),
-        meta: getMeta(isListOfEntities),
-      },
+      $ref: `#/components/schemas/${responseName}`,
     };
   }
 
